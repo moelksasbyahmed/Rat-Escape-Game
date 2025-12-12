@@ -7,13 +7,13 @@ class GameScene extends Phaser.Scene {
         this.traps = [];
         this.exitZone = null;
         this.isDragging = false;
-        this.gridSize = 50;
+        this.gridSize = 40;
         this.mapOffsetX = 50;
         this.mapOffsetY = 80;
         this.mapWidth = 600;
-        this.mapHeight = 450;
-        this.gridWidth = 12; // 600 / 50
-        this.gridHeight = 9; // 450 / 50
+        this.mapHeight = 440; // 11 * 40
+        this.gridWidth = 15; // 600 / 40
+        this.gridHeight = 11; // 440 / 40
         this.placementMode = 'trap'; // 'trap', 'cat', 'mouse', 'door'
     }
 
@@ -54,7 +54,18 @@ class GameScene extends Phaser.Scene {
 
         // Enable map clicking for placement
         this.input.on('pointerdown', (pointer) => {
+            this.isDragging = true;
             this.handleMapClick(pointer);
+        });
+
+        this.input.on('pointermove', (pointer) => {
+            if (this.isDragging && this.placementMode === 'trap') {
+                this.handleMapClick(pointer);
+            }
+        });
+
+        this.input.on('pointerup', () => {
+            this.isDragging = false;
         });
     }
 
@@ -282,67 +293,68 @@ class GameScene extends Phaser.Scene {
         }
     }
 
-    placeTrap(x, y, gridX, gridY) {
-        const trap = this.add.rectangle(x, y, 40, 40, 0xf44336);
-        const trapText = this.add.text(x, y, '⚠️', {
-            fontSize: '30px'
-        }).setOrigin(0.5);
+    isCellOccupied(gridX, gridY) {
+        // Check traps/walls
+        if (this.traps.some(t => t.getData('gridX') === gridX && t.getData('gridY') === gridY)) return true;
+        // Check cat
+        if (this.cat && this.cat.getData('gridX') === gridX && this.cat.getData('gridY') === gridY) return true;
+        // Check mouse
+        if (this.mouse && this.mouse.getData('gridX') === gridX && this.mouse.getData('gridY') === gridY) return true;
+        // Check door
+        if (this.door && this.door.getData('gridX') === gridX && this.door.getData('gridY') === gridY) return true;
+        
+        return false;
+    }
 
-        trap.setData('trapText', trapText);
+    placeTrap(x, y, gridX, gridY) {
+        // Check if anything exists at this grid location
+        if (this.isCellOccupied(gridX, gridY)) return;
+
+        // Wall style: Dark gray rectangle
+        const trap = this.add.rectangle(x, y, this.gridSize, this.gridSize, 0x424242);
+        trap.setStrokeStyle(2, 0x000000);
+        
+        // Optional: Add a small "brick" detail
+        const detailSize = this.gridSize * 0.6;
+        const detail = this.add.rectangle(x, y, detailSize, detailSize, 0x616161);
+        
+        // Group them for easier management
+        trap.setData('detail', detail);
         trap.setData('gridX', gridX);
         trap.setData('gridY', gridY);
 
-        // Make draggable
-        trap.setInteractive({ useHandCursor: true });
-        this.input.setDraggable(trap);
-
-        trap.on('drag', (pointer, dragX, dragY) => {
-            // Check if within map bounds
-            if (dragX < this.mapOffsetX || dragX > this.mapOffsetX + this.mapWidth ||
-                dragY < this.mapOffsetY || dragY > this.mapOffsetY + this.mapHeight) {
-                return;
-            }
-            
-            const relX = dragX - this.mapOffsetX;
-            const relY = dragY - this.mapOffsetY;
-            const snapX = this.mapOffsetX + Math.round(relX / this.gridSize) * this.gridSize + this.gridSize / 2;
-            const snapY = this.mapOffsetY + Math.round(relY / this.gridSize) * this.gridSize + this.gridSize / 2;
-            trap.setPosition(snapX, snapY);
-            trapText.setPosition(snapX, snapY);
-            trap.setData('gridX', Math.floor((snapX - this.mapOffsetX) / this.gridSize));
-            trap.setData('gridY', Math.floor((snapY - this.mapOffsetY) / this.gridSize));
-        });
-
         // Right-click to delete
+        trap.setInteractive({ useHandCursor: true });
         trap.on('pointerdown', (pointer) => {
             if (pointer.rightButtonDown()) {
-                trapText.destroy();
+                if (trap.getData('detail')) trap.getData('detail').destroy();
                 trap.destroy();
                 this.traps = this.traps.filter(t => t !== trap);
             }
         });
 
         this.traps.push(trap);
-
-        // Pulsing animation
+        
+        // Pop animation (only once)
         this.tweens.add({
-            targets: [trap, trapText],
-            scale: 1.2,
-            duration: 800,
-            yoyo: true,
-            repeat: -1,
-            ease: 'Sine.easeInOut'
+            targets: [trap, detail],
+            scale: { from: 0, to: 1 },
+            duration: 200,
+            ease: 'Back.out'
         });
     }
 
     placeCat(x, y, gridX, gridY) {
+        if (this.isCellOccupied(gridX, gridY)) return;
+
         // Remove existing cat
         if (this.cat) {
             this.cat.destroy();
         }
 
+        const fontSize = Math.floor(this.gridSize * 0.8) + 'px';
         const catText = this.add.text(x, y, '🐱', {
-            fontSize: '48px'
+            fontSize: fontSize
         }).setOrigin(0.5);
 
         catText.setData('gridX', gridX);
@@ -362,9 +374,17 @@ class GameScene extends Phaser.Scene {
             const relY = dragY - this.mapOffsetY;
             const snapX = this.mapOffsetX + Math.round(relX / this.gridSize) * this.gridSize + this.gridSize / 2;
             const snapY = this.mapOffsetY + Math.round(relY / this.gridSize) * this.gridSize + this.gridSize / 2;
-            catText.setPosition(snapX, snapY);
-            catText.setData('gridX', Math.floor((snapX - this.mapOffsetX) / this.gridSize));
-            catText.setData('gridY', Math.floor((snapY - this.mapOffsetY) / this.gridSize));
+            
+            // Update grid pos
+            const newGridX = Math.floor((snapX - this.mapOffsetX) / this.gridSize);
+            const newGridY = Math.floor((snapY - this.mapOffsetY) / this.gridSize);
+
+            // Only move if cell is empty (excluding self)
+            if (!this.isCellOccupied(newGridX, newGridY) || (newGridX === gridX && newGridY === gridY)) {
+                catText.setPosition(snapX, snapY);
+                catText.setData('gridX', newGridX);
+                catText.setData('gridY', newGridY);
+            }
         });
 
         // Right-click to delete
@@ -379,13 +399,16 @@ class GameScene extends Phaser.Scene {
     }
 
     placeMouse(x, y, gridX, gridY) {
+        if (this.isCellOccupied(gridX, gridY)) return;
+
         // Remove existing mouse
         if (this.mouse) {
             this.mouse.destroy();
         }
 
+        const fontSize = Math.floor(this.gridSize * 0.8) + 'px';
         const mouseText = this.add.text(x, y, '🐭', {
-            fontSize: '40px'
+            fontSize: fontSize
         }).setOrigin(0.5);
 
         mouseText.setData('gridX', gridX);
@@ -395,19 +418,22 @@ class GameScene extends Phaser.Scene {
         this.input.setDraggable(mouseText);
 
         mouseText.on('drag', (pointer, dragX, dragY) => {
-            // Check if within map bounds
             if (dragX < this.mapOffsetX || dragX > this.mapOffsetX + this.mapWidth ||
-                dragY < this.mapOffsetY || dragY > this.mapOffsetY + this.mapHeight) {
-                return;
-            }
+                dragY < this.mapOffsetY || dragY > this.mapOffsetY + this.mapHeight) return;
             
             const relX = dragX - this.mapOffsetX;
             const relY = dragY - this.mapOffsetY;
             const snapX = this.mapOffsetX + Math.round(relX / this.gridSize) * this.gridSize + this.gridSize / 2;
             const snapY = this.mapOffsetY + Math.round(relY / this.gridSize) * this.gridSize + this.gridSize / 2;
-            mouseText.setPosition(snapX, snapY);
-            mouseText.setData('gridX', Math.floor((snapX - this.mapOffsetX) / this.gridSize));
-            mouseText.setData('gridY', Math.floor((snapY - this.mapOffsetY) / this.gridSize));
+            
+            const newGridX = Math.floor((snapX - this.mapOffsetX) / this.gridSize);
+            const newGridY = Math.floor((snapY - this.mapOffsetY) / this.gridSize);
+
+            if (!this.isCellOccupied(newGridX, newGridY) || (newGridX === gridX && newGridY === gridY)) {
+                mouseText.setPosition(snapX, snapY);
+                mouseText.setData('gridX', newGridX);
+                mouseText.setData('gridY', newGridY);
+            }
         });
 
         // Right-click to delete
@@ -422,13 +448,16 @@ class GameScene extends Phaser.Scene {
     }
 
     placeDoor(x, y, gridX, gridY) {
+        if (this.isCellOccupied(gridX, gridY)) return;
+
         // Remove existing door
         if (this.door) {
             this.door.destroy();
         }
 
+        const fontSize = Math.floor(this.gridSize * 0.8) + 'px';
         const doorText = this.add.text(x, y, '🚪', {
-            fontSize: '48px'
+            fontSize: fontSize
         }).setOrigin(0.5);
 
         doorText.setData('gridX', gridX);
@@ -438,19 +467,22 @@ class GameScene extends Phaser.Scene {
         this.input.setDraggable(doorText);
 
         doorText.on('drag', (pointer, dragX, dragY) => {
-            // Check if within map bounds
             if (dragX < this.mapOffsetX || dragX > this.mapOffsetX + this.mapWidth ||
-                dragY < this.mapOffsetY || dragY > this.mapOffsetY + this.mapHeight) {
-                return;
-            }
+                dragY < this.mapOffsetY || dragY > this.mapOffsetY + this.mapHeight) return;
             
             const relX = dragX - this.mapOffsetX;
             const relY = dragY - this.mapOffsetY;
             const snapX = this.mapOffsetX + Math.round(relX / this.gridSize) * this.gridSize + this.gridSize / 2;
             const snapY = this.mapOffsetY + Math.round(relY / this.gridSize) * this.gridSize + this.gridSize / 2;
-            doorText.setPosition(snapX, snapY);
-            doorText.setData('gridX', Math.floor((snapX - this.mapOffsetX) / this.gridSize));
-            doorText.setData('gridY', Math.floor((snapY - this.mapOffsetY) / this.gridSize));
+            
+            const newGridX = Math.floor((snapX - this.mapOffsetX) / this.gridSize);
+            const newGridY = Math.floor((snapY - this.mapOffsetY) / this.gridSize);
+
+            if (!this.isCellOccupied(newGridX, newGridY) || (newGridX === gridX && newGridY === gridY)) {
+                doorText.setPosition(snapX, snapY);
+                doorText.setData('gridX', newGridX);
+                doorText.setData('gridY', newGridY);
+            }
         });
 
         // Right-click to delete
@@ -465,10 +497,10 @@ class GameScene extends Phaser.Scene {
     }
 
     clearMap() {
-        // Clear all traps
+        // Clear all traps/walls
         this.traps.forEach(trap => {
-            const trapText = trap.getData('trapText');
-            if (trapText) trapText.destroy();
+            const detail = trap.getData('detail');
+            if (detail) detail.destroy();
             trap.destroy();
         });
         this.traps = [];
@@ -503,7 +535,7 @@ class GameScene extends Phaser.Scene {
             const gridX = trap.getData('gridX');
             const gridY = trap.getData('gridY');
             if (gridX >= 0 && gridX < this.gridWidth && gridY >= 0 && gridY < this.gridHeight) {
-                grid[gridY][gridX] = 'X';
+                grid[gridY][gridX] = '#';
             }
         });
 
@@ -554,6 +586,11 @@ class GameScene extends Phaser.Scene {
         
         if (!this.cat) {
             this.showError('Please place the CAT on the map!');
+            return;
+        }
+
+        if (!this.door) {
+            this.showError('Please place the DOOR on the map!');
             return;
         }
         

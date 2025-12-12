@@ -151,22 +151,36 @@ class SolvingScene extends Phaser.Scene {
         .then(result => {
             console.log('Solver result:', result);
             
-            if (result.success && result.solution) {
+            if (result.success) {
                 // Solution found - mouse can escape!
-                this.statusText.setText('Path found! Mouse escapes!');
+                this.statusText.setText('Path found! Starting Game...');
                 this.statusText.setColor('#4caf50');
                 this.time.delayedCall(1500, () => {
-                    this.scene.start('WinScene');
+                    this.scene.start('PlayScene', { 
+                        mapData: this.mapData,
+                        solution: result
+                    });
                 });
             } else if (result.success === false) {
-                // No solution or error - mouse dies
-                console.error('Solver error:', result.error);
-                console.log('Python output:', result.output);
-                this.statusText.setText('No safe path found!');
-                this.statusText.setColor('#f44336');
-                this.time.delayedCall(2000, () => {
-                    this.scene.start('LoseScene');
-                });
+                // No safe path, but we might have a "best effort" path
+                if (result.path && result.path.length > 0) {
+                    this.statusText.setText('No safe path... Hunting time!');
+                    this.statusText.setColor('#ff9800');
+                    this.time.delayedCall(1500, () => {
+                        this.scene.start('PlayScene', { 
+                            mapData: this.mapData,
+                            solution: result
+                        });
+                    });
+                } else {
+                    // No path at all (trapped at start)
+                    console.error('Solver error:', result.error);
+                    this.statusText.setText('No safe path found!');
+                    this.statusText.setColor('#f44336');
+                    this.time.delayedCall(2000, () => {
+                        this.scene.start('LoseScene');
+                    });
+                }
             } else {
                 // Unexpected response
                 console.error('Unexpected response:', result);

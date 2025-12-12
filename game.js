@@ -11,7 +11,7 @@ const config = {
             debug: false
         }
     },
-    scene: [EntranceScene, GameScene, SolvingScene, SolutionScene, WinScene, LoseScene]
+    scene: [EntranceScene, GameScene, SolvingScene, PlayScene, SolutionScene, WinScene, LoseScene]
 };
 
 const game = new Phaser.Game(config);

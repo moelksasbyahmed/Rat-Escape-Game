@@ -31,7 +31,7 @@ class SolutionScene extends Phaser.Scene {
         // Map display
         const mapOffsetX = 50;
         const mapOffsetY = 100;
-        const gridSize = 50;
+        const gridSize = 40;
 
         // Draw the map with solution
         this.drawSolutionMap(mapOffsetX, mapOffsetY, gridSize);

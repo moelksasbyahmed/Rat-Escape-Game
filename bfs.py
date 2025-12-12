@@ -104,7 +104,67 @@ def BFS_MOUSE(SRC: tuple):
 BFS_CAT(SRC=SRC_CAT)
 State = BFS_MOUSE(SRC=SRC_MOUSE)
 
-if State == 'Path Found':
-    print("[WIN] You Passed Mouse Alive!")
-else:
-    print("[LOSE] No Safe Path Mouse died")
+# Output result as JSON
+result = {
+    "success": State == 'Path Found',
+    "message": "Mouse can escape safely!" if State == 'Path Found' else "No Safe Path Mouse died",
+    "path": [],
+    "mouse_start": SRC_MOUSE,
+    "cat_start": SRC_CAT,
+    "door_pos": None
+}
+
+# Find door position
+for i in range(N):
+    for j in range(M):
+        if MAP[i][j] in ['G', 'D']:
+            result["door_pos"] = (i, j)
+            break
+
+# Reconstruct path if found
+
+def BFS_MOUSE_NOCAT(SRC: tuple):
+    Q = [SRC]
+    DISTANCE_MOUSE[SRC] = 0
+
+    while Q:   
+        I, J = Q.pop(0)
+
+        if Check_Goal(I, J):
+            return
+
+        for k in range(4):
+            newi = I + DX[k]  
+            newj = J + DY[k]   
+
+            if 0 <= newi < N and 0 <= newj < M:  
+
+                if MAP[newi][newj] == '#':
+                    continue
+
+                new_T = (newi, newj)
+
+                # Not visited
+                if new_T not in DISTANCE_MOUSE: 
+                        PARENT[new_T] = (I, J)
+                        DISTANCE_MOUSE[new_T] = DISTANCE_MOUSE[(I, J)] + 1
+                        Q.append(new_T)
+
+    return
+
+if(State != 'Path Found'):
+    PARENT.clear()
+    DISTANCE_MOUSE.clear()
+    BFS_MOUSE_NOCAT(SRC=SRC_MOUSE)
+
+curr = result["door_pos"]
+path = []
+while curr != SRC_MOUSE:
+    path.append(curr)
+    curr = PARENT[curr]
+path.append(SRC_MOUSE)
+path.reverse()
+result["path"] = path
+
+
+print(json.dumps(result))

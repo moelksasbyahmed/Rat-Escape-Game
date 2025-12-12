@@ -133,29 +133,30 @@ const server = http.createServer((req, res) => {
 });
 
 function parseSolverOutput(output) {
-    // Extract information from Python output
-    const lines = output.split('\n');
+    // Extract JSON from Python output
+    // Python might print other things (warnings, etc), so we look for the last line that looks like JSON
+    const lines = output.trim().split('\n');
+    let lastJson = null;
+
+    for (let i = lines.length - 1; i >= 0; i--) {
+        try {
+            const parsed = JSON.parse(lines[i]);
+            if (parsed.success !== undefined) {
+                lastJson = parsed;
+                break;
+            }
+        } catch (e) {
+            // Not a JSON line, ignore
+        }
+    }
     
-    // Check for WIN or LOSE markers from bfs.py
-    const isWin = output.includes('[WIN]');
-    const isLose = output.includes('[LOSE]');
-    
-    if (!isWin && !isLose) {
-        console.log('No WIN/LOSE indicators found in output');
+    if (!lastJson) {
+        console.log('No valid JSON found in Python output');
         return null;
     }
     
-    if (isLose) {
-        console.log('BFS determined: Mouse cannot reach door safely');
-        return null;
-    }
-    
-    // If WIN, return success indicator
-    console.log('BFS determined: Mouse can reach door safely!');
-    return {
-        success: true,
-        message: 'Mouse can escape safely!'
-    };
+    console.log('BFS Result:', lastJson);
+    return lastJson;
 }
 
 function serveFile(filePath, contentType, res) {
